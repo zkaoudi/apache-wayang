@@ -116,7 +116,8 @@ public class JavaCSVTableSource<T> extends UnarySource<T> implements JavaExecuti
     }
 
     private Stream<Record> createStream(final String actualInputPath) {
-        return this.streamLines(actualInputPath).map(this::parseLine);
+        validateHeaderLine(actualInputPath);
+        return streamLines(actualInputPath).map(this::parseLine);
     }
 
     private Record parseLine(final String s) {
@@ -168,20 +169,12 @@ public class JavaCSVTableSource<T> extends UnarySource<T> implements JavaExecuti
      * @param path of the file
      * @return the {@link Stream}
      */
-    private Stream<String> streamLines(final String path) {
+    private static Stream<String> streamLines(final String path) {
         final FileSystem fileSystem = FileSystems.getFileSystem(path).orElseThrow(
                 () -> new IllegalStateException(String.format("No file system found for %s", path)));
         try {
             final Iterator<String> lineIterator = createLineIterator(fileSystem, path);
-
-            if (!lineIterator.hasNext()) {
-                throw new IllegalStateException(String.format(
-                        "CSV file '%s' is empty. Expected a header row (e.g., 'id:int,name:string').",
-                        path));
-            }
-
-            final String headerLine = lineIterator.next(); // read & skip header
-            validateHeaderLine(headerLine);
+            lineIterator.next(); // skip header row
             return StreamSupport.stream(Spliterators.spliteratorUnknownSize(lineIterator, 0), false);
         } catch (final IOException e) {
             throw new WayangException(String.format("%s failed to read %s.", FileUtils.class, path), e);
@@ -199,24 +192,37 @@ public class JavaCSVTableSource<T> extends UnarySource<T> implements JavaExecuti
      *
      * @param path the filesystem path to the CSV file
      */
-    private void validateHeaderLine(final String headerLine) {
-        final String[] headerColumns = headerLine.split(",");
+    private void validateHeaderLine(final String path) {
+        final FileSystem fileSystem = FileSystems.getFileSystem(path).orElseThrow(
+                () -> new IllegalStateException(String.format("No file system found for %s", path)));
+        try {
+            final Iterator<String> lineIterator = createLineIterator(fileSystem, path);
 
-        if (headerColumns.length != fieldTypes.size()) {
-            throw new IllegalStateException(String.format(
-                    "CSV file '%s': header has %d comma-separated columns but table schema expects %d. "
-                    + "Ensure the header uses commas with typed columns "
-                    + "(e.g., 'id:int,name:string,email:string,country:string'). Header: '%s'.",
-                    sourcePath, headerColumns.length, fieldTypes.size(), headerLine));
-        }
-
-        for (final String column : headerColumns) {
-            if (!column.trim().contains(":")) {
-                throw new IllegalStateException(String.format(
-                        "CSV file '%s': header column '%s' missing required type. "
-                        + "Expected 'name:type' format (e.g., 'id:int'). Full header: '%s'.",
-                        sourcePath, column.trim(), headerLine));
+            if (!lineIterator.hasNext()) {
+                throw new IllegalStateException(String.format("CSV file '%s' is empty. Expected a header row (e.g., 'id:int,name:string').",path));
             }
+            
+            final String headerLine = lineIterator.next(); // read header row
+            final String[] headerColumns = headerLine.split(","); // split header row into columns
+
+            if (headerColumns.length != fieldTypes.size()) {
+                throw new IllegalStateException(String.format(
+                        "CSV file '%s': header has %d comma-separated columns but table schema expects %d. "
+                        + "Ensure the header uses commas with typed columns "
+                        + "(e.g., 'id:int,name:string,email:string,country:string'). Header: '%s'.",
+                        sourcePath, headerColumns.length, fieldTypes.size(), headerLine));
+            }
+
+            for (final String column : headerColumns) {
+                if (!column.trim().contains(":")) {
+                    throw new IllegalStateException(String.format(
+                            "CSV file '%s': header column '%s' missing required type. "
+                            + "Expected 'name:type' format (e.g., 'id:int'). Full header: '%s'.",
+                            sourcePath, column.trim(), headerLine));
+                }
+            }
+        } catch (final IOException e) {
+            throw new WayangException(String.format("%s failed to read %s.", FileUtils.class, path), e);
         }
     }
 
