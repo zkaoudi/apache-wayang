@@ -116,7 +116,6 @@ public class JavaCSVTableSource<T> extends UnarySource<T> implements JavaExecuti
     }
 
     private Stream<Record> createStream(final String actualInputPath) {
-        validateHeaderLine(actualInputPath);
         return streamLines(actualInputPath).map(this::parseLine);
     }
 
@@ -128,11 +127,9 @@ public class JavaCSVTableSource<T> extends UnarySource<T> implements JavaExecuti
             if (tokens.length != fieldTypes.size())
                 throw new IllegalStateException(
                     String.format(
-                        "Column count mismatch in CSV file '%s': expected %d columns but found %d "
-                        + "(separator '%s'). Line: '%s'. "
-                        + "Ensure the header uses 'name:type' format with commas "
-                        + "and data rows use '%s' as delimiter.",
-                        sourcePath, fieldTypes.size(), tokens.length, separator, s, separator));
+                        "CSV file '%s': data row has %d columns but expected %d "
+                        + "(separator '%s'). Line: '%s'.",
+                        sourcePath, tokens.length, fieldTypes.size(), separator, s));
             // now tokens.length == fieldtypes.size
 
             final Object[] objects = new Object[tokens.length];
@@ -174,55 +171,50 @@ public class JavaCSVTableSource<T> extends UnarySource<T> implements JavaExecuti
                 () -> new IllegalStateException(String.format("No file system found for %s", path)));
         try {
             final Iterator<String> lineIterator = createLineIterator(fileSystem, path);
-            lineIterator.next(); // skip header row
+            if (!lineIterator.hasNext()) {
+                throw new IllegalStateException(String.format("CSV file '%s' is empty. Expected a header row (e.g., 'id:int,name:string').",path));
+            }
+            String headerLine = lineIterator.next(); // read and skip header line
+            validateHeaderLine(path, headerLine);
             return StreamSupport.stream(Spliterators.spliteratorUnknownSize(lineIterator, 0), false);
         } catch (final IOException e) {
             throw new WayangException(String.format("%s failed to read %s.", FileUtils.class, path), e);
         }
-
     }
 
     /**
      * Validates the CSV header for Calcite compatibility.
-     * Checks that the header is present, uses comma separators (not the data
-     * delimiter), and each column follows the 'name:type' format
-     * (e.g., 'id:int,name:string,email:string'). Note that Calcite hardcodes
-     * commas for header parsing, while data rows use Wayang's configurable
-     * separator (default ';').
+     * Checks that each column follows the 'name:type' format
+     * (e.g., 'id:int,name:string,email:string') and that commas
+     * are used as the header separator.
      *
-     * @param path the filesystem path to the CSV file
+     * @param path       the filesystem path to the CSV file
+     * @param headerLine the first line of the CSV file
      */
-    private void validateHeaderLine(final String path) {
-        final FileSystem fileSystem = FileSystems.getFileSystem(path).orElseThrow(
-                () -> new IllegalStateException(String.format("No file system found for %s", path)));
-        try {
-            final Iterator<String> lineIterator = createLineIterator(fileSystem, path);
+    private static void validateHeaderLine(final String path, final String headerLine) {
+        final String[] headerColumns = headerLine.split(","); // split header row into columns
 
-            if (!lineIterator.hasNext()) {
-                throw new IllegalStateException(String.format("CSV file '%s' is empty. Expected a header row (e.g., 'id:int,name:string').",path));
+        int colonCount = 0;
+        for (int i = 0; i < headerLine.length(); i++) {
+            if (headerLine.charAt(i) == ':') {
+                colonCount++;
             }
-            
-            final String headerLine = lineIterator.next(); // read header row
-            final String[] headerColumns = headerLine.split(","); // split header row into columns
+        }
 
-            if (headerColumns.length == 1 && headerLine.contains(String.valueOf(separator))) {
+        for (final String column : headerColumns) {
+            if (!column.trim().contains(":")) {
                 throw new IllegalStateException(String.format(
-                        "CSV file '%s': header uses '%s' as separator, but Calcite requires commas. "
-                        + "Header: '%s'. "
-                        + "Expected format: %s.",
-                        sourcePath, separator, headerLine, headerLine.replace(String.valueOf(separator), ",")));
+                        "CSV file '%s': header column '%s' missing required type. "
+                        + "Expected 'name:type' format (e.g., 'id:int'). Header: '%s'.",
+                        path, column.trim(), headerLine));
             }
+        }
 
-            for (final String column : headerColumns) {
-                if (!column.trim().contains(":")) {
-                    throw new IllegalStateException(String.format(
-                            "CSV file '%s': header column '%s' missing required type. "
-                            + "Expected 'name:type' format (e.g., 'id:int'). Full header: '%s'.",
-                            sourcePath, column.trim(), headerLine));
-                }
-            }
-        } catch (final IOException e) {
-            throw new WayangException(String.format("%s failed to read %s.", FileUtils.class, path), e);
+        if (headerColumns.length != colonCount) {
+            throw new IllegalStateException(String.format(
+                    "CSV file '%s': column count mismatch. Expected %d comma-separated 'name:type' columns "
+                    + "but found %d. Header: '%s'.",
+                    path, colonCount, headerColumns.length, headerLine));
         }
     }
 
