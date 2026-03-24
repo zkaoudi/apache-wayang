@@ -25,11 +25,13 @@ import org.apache.wayang.core.platform.Platform
 import org.apache.wayang.core.types.DataSetType
 
 /**
-  * Utility to extend a [[DataQuantaBuilder]]'s functionality by decoration.
-  */
-/**
- * TODO: add the documentation in the methods of org.apache.wayang.api.util.DataQuantaBuilderDecorator
- * labels: documentation,todo
+ * Utility to extend a [[DataQuantaBuilder]]'s functionality by decoration.
+ *
+ * DataQuantaBuilderDecorator follows the Decorator design pattern, allowing
+ * additional behaviour to be added to [[DataQuantaBuilder]] instances without
+ * modifying the original class. This is particularly useful for building
+ * flexible and composable data processing pipelines in Apache Wayang,
+ * including the upcoming DataFrame API where composable operators are essential.
  */
 abstract class DataQuantaBuilderDecorator[This <: DataQuantaBuilder[This, Out], Out]
 (baseBuilder: DataQuantaBuilder[_, Out])
