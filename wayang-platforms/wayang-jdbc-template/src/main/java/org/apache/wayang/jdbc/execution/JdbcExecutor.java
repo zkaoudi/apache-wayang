@@ -164,7 +164,7 @@ public class JdbcExecutor extends ExecutorTemplate {
                 stmt.execute("DROP TABLE IF EXISTS " + sinkOp.getTableName());
             }
             // Execute the composed query: CREATE TABLE x AS SELECT ... or INSERT INTO x SELECT ...
-            final String fullSql = sinkClause + " " + selectSql;
+            final String fullSql = sinkClause + " " + selectSql + sinkOp.createSqlSuffix();
             stmt.execute(fullSql);
             jdbcExecutor.logger.info("Executed SQL sink: {}", fullSql);
         } catch (SQLException e) {

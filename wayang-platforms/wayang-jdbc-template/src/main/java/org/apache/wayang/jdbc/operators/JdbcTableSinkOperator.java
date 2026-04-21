@@ -56,6 +56,16 @@ public abstract class JdbcTableSinkOperator extends TableSink<Record> implements
         return "INSERT INTO " + this.getTableName();
     }
 
+    /**
+     * Returns a SQL suffix appended after the composed SELECT query.
+     * Default is empty, which works for most databases (PostgreSQL, SQLite, MySQL).
+     * Subclasses can potentiallyoverride for dialect-specific syntax (e.g., HSQLDB that we used for the tests requires
+     * parenthesized subquery form: {@code CREATE TABLE x AS (SELECT ...)}).
+     */
+    public String createSqlSuffix() {
+        return "";
+    }
+
     @Override
     public List<ChannelDescriptor> getSupportedInputChannels(int index) {
         return Collections.singletonList(this.getPlatform().getSqlQueryChannelDescriptor());
