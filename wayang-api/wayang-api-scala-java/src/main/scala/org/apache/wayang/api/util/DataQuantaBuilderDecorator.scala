@@ -29,9 +29,7 @@ import org.apache.wayang.core.types.DataSetType
  *
  * DataQuantaBuilderDecorator follows the Decorator design pattern, allowing
  * additional behaviour to be added to [[DataQuantaBuilder]] instances without
- * modifying the original class. This is particularly useful for building
- * flexible and composable data processing pipelines in Apache Wayang,
- * including the upcoming DataFrame API where composable operators are essential.
+ * modifying the original class. 
  */
 abstract class DataQuantaBuilderDecorator[This <: DataQuantaBuilder[This, Out], Out]
 (baseBuilder: DataQuantaBuilder[_, Out])
