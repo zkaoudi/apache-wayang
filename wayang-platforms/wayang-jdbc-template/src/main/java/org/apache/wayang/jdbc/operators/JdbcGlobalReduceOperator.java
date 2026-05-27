@@ -24,6 +24,7 @@ import java.util.Optional;
 import org.apache.wayang.basic.operators.GlobalReduceOperator;
 import org.apache.wayang.core.api.Configuration;
 import org.apache.wayang.core.function.ReduceDescriptor;
+import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.core.optimizer.costs.LoadProfileEstimator;
 import org.apache.wayang.core.optimizer.costs.LoadProfileEstimators;
 import org.apache.wayang.core.types.DataSetType;

@@ -33,8 +33,8 @@ import java.util.Optional;
 
 public abstract class JdbcReduceByOperator extends ReduceByOperator<Record, Record> implements JdbcExecutionOperator {
     public JdbcReduceByOperator(final TransformationDescriptor<Record, Record> keyDescriptor,
-            final ReduceDescriptor<Record> reduceDescriptor, final DataSetType<Record> type) {
-        super(keyDescriptor, reduceDescriptor, type);
+            final ReduceDescriptor<Record> reduceDescriptor) {
+        super(keyDescriptor, reduceDescriptor, DataSetType.createDefault(Record.class));
     }
 
     public JdbcReduceByOperator(final ReduceByOperator<Record, Record> that) {
@@ -48,7 +48,7 @@ public abstract class JdbcReduceByOperator extends ReduceByOperator<Record, Reco
 
     @Override
     public String createSqlClause(final Connection connection, final FunctionCompiler compiler) {
-        return reduceDescriptor.getSqlImplementation();
+        return keyDescriptor.getSqlImplementation().getField0() + "," + reduceDescriptor.getSqlImplementation();
     }
 
     @Override

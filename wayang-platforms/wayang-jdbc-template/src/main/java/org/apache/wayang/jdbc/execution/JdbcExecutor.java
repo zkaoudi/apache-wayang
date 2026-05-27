@@ -30,7 +30,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.wayang.basic.data.Tuple2;
 import org.apache.wayang.basic.operators.FilterOperator;
-import org.apache.wayang.basic.operators.GlobalReduceOperator;
 import org.apache.wayang.basic.operators.JoinOperator;
 import org.apache.wayang.basic.operators.SpatialFilterOperator;
 import org.apache.wayang.basic.operators.SpatialJoinOperator;
@@ -54,6 +53,8 @@ import org.apache.wayang.jdbc.operators.JdbcFilterOperator;
 import org.apache.wayang.jdbc.operators.JdbcGlobalReduceOperator;
 import org.apache.wayang.jdbc.operators.JdbcJoinOperator;
 import org.apache.wayang.jdbc.operators.JdbcProjectionOperator;
+import org.apache.wayang.jdbc.operators.JdbcReduceByOperator;
+import org.apache.wayang.jdbc.operators.JdbcSortOperator;
 import org.apache.wayang.jdbc.operators.JdbcTableSinkOperator;
 import org.apache.wayang.jdbc.operators.JdbcTableSource;
 import org.apache.wayang.jdbc.platform.JdbcPlatformTemplate;
@@ -63,7 +64,7 @@ import org.apache.wayang.jdbc.platform.JdbcPlatformTemplate;
  */
 public class JdbcExecutor extends ExecutorTemplate {
     public static StringBuilder createSqlString(final JdbcExecutor jdbcExecutor, final JdbcTableSource tableOp,
-            final Collection<JdbcExecutionOperator> filterTasks, final JdbcProjectionOperator projectionTask, final JdbcGlobalReduceOperator globalReduceTask,
+            final Collection<JdbcExecutionOperator> filterTasks, final JdbcProjectionOperator projectionTask, final JdbcGlobalReduceOperator globalReduceTask, final JdbcReduceByOperator reduceByTask, final JdbcSortOperator sortTask, 
             final Collection<JdbcExecutionOperator> joinTasks) {
         final String tableName = tableOp.createSqlClause(jdbcExecutor.connection, jdbcExecutor.functionCompiler);
         final Collection<String> conditions = filterTasks.stream()
@@ -76,6 +77,11 @@ public class JdbcExecutor extends ExecutorTemplate {
         final String selectClause;
             if (globalReduceTask != null) {
                 selectClause = globalReduceTask.createSqlClause(
+                    jdbcExecutor.connection,
+                    jdbcExecutor.functionCompiler
+                );
+            } else if (reduceByTask != null) {
+                selectClause = reduceByTask.createSqlClause(
                     jdbcExecutor.connection,
                     jdbcExecutor.functionCompiler
                 );
@@ -100,6 +106,16 @@ public class JdbcExecutor extends ExecutorTemplate {
             sb.append(" WHERE ");
             sb.append(String.join(" AND ", conditions));
         }
+        if (reduceByTask != null) {
+            sb.append(" GROUP BY " + reduceByTask.getKeyDescriptor().getSqlImplementation().getField0());
+        }        
+        if (sortTask != null) {
+            sb.append(sortTask.createSqlClause(
+                jdbcExecutor.connection,
+                jdbcExecutor.functionCompiler
+            ));
+        }
+
         sb.append(';');
         return sb;
     }
@@ -127,6 +143,8 @@ public class JdbcExecutor extends ExecutorTemplate {
         final Collection<JdbcExecutionOperator> filterTasks = new ArrayList<>(4);
         JdbcProjectionOperator projectionTask = null;
         JdbcGlobalReduceOperator globalReduceTask = null;
+        JdbcReduceByOperator reduceByTask = null;
+        JdbcSortOperator sortTask = null;
         final Collection<JdbcExecutionOperator> joinTasks = new ArrayList<>();
         final Set<ExecutionTask> allTasks = stage.getAllTasks();
         assert allTasks.size() <= 3;
@@ -139,9 +157,15 @@ public class JdbcExecutor extends ExecutorTemplate {
             } else if (operator instanceof JdbcProjectionOperator) {
                 assert projectionTask == null; // Allow one projection operator per stage for now.
                 projectionTask = (JdbcProjectionOperator) operator;
-            } else if (operator instanceof JdbcGlobalReduceOperator globalReduce) {
+            } else if (operator instanceof final JdbcGlobalReduceOperator globalReduce) {
                 assert globalReduceTask == null; // Allow one projection operator per stage for now.
                 globalReduceTask = globalReduce;
+            } else if (operator instanceof final JdbcReduceByOperator reduceBy) {
+                assert reduceByTask == null; // Allow one projection operator per stage for now.
+                reduceByTask = reduceBy;
+            } else if (operator instanceof final JdbcSortOperator sort) {
+                assert sortTask == null; // Allow one projection operator per stage for now.
+                sortTask = sort;
             } else if (operator instanceof JoinOperator || (operator instanceof SpatialJoinOperator)) {
                 joinTasks.add((JdbcExecutionOperator) operator);
             } else {
@@ -157,7 +181,8 @@ public class JdbcExecutor extends ExecutorTemplate {
         }
 
         // Create the SQL query.
-        final StringBuilder query = createSqlString(jdbcExecutor, tableOp, filterTasks, projectionTask, globalReduceTask, joinTasks);
+        final StringBuilder query = createSqlString(jdbcExecutor, tableOp, filterTasks, projectionTask, globalReduceTask, reduceByTask, sortTask, joinTasks);
+        
         return new Tuple2<>(query.toString(), tipChannelInstance);
     }
 
@@ -208,7 +233,7 @@ public class JdbcExecutor extends ExecutorTemplate {
         }
 
         // Compose the SELECT query
-        final StringBuilder selectQuery = createSqlString(jdbcExecutor, tableOp, filterTasks, projectionTask, null,
+        final StringBuilder selectQuery = createSqlString(jdbcExecutor, tableOp, filterTasks, projectionTask, null, null, null,
                 joinTasks);
 
         // Remove trailing semicolon from SELECT

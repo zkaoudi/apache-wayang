@@ -20,6 +20,7 @@ package org.apache.wayang.jdbc.test;
 
 import org.apache.wayang.core.function.ReduceDescriptor;
 import org.apache.wayang.jdbc.operators.JdbcGlobalReduceOperator;
+import org.apache.wayang.basic.data.Record;
 
 /**
  * Test implementation of {@link JdbcGlobalReduceOperator}.

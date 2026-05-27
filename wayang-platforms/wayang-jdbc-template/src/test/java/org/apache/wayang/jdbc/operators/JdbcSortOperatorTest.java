@@ -19,36 +19,30 @@
 package org.apache.wayang.jdbc.operators;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Collections;
 
 import org.apache.wayang.core.api.Configuration;
 import org.apache.wayang.core.api.Job;
-import org.apache.wayang.core.function.ReduceDescriptor;
+import org.apache.wayang.core.function.TransformationDescriptor;
 import org.apache.wayang.core.optimizer.DefaultOptimizationContext;
 import org.apache.wayang.core.plan.executionplan.ExecutionStage;
 import org.apache.wayang.core.plan.executionplan.ExecutionTask;
 import org.apache.wayang.core.plan.wayangplan.ExecutionOperator;
 import org.apache.wayang.core.platform.CrossPlatformExecutor;
+import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.core.profiling.NoInstrumentationStrategy;
 import org.apache.wayang.jdbc.channels.SqlQueryChannel;
 import org.apache.wayang.jdbc.execution.JdbcExecutor;
-import org.apache.wayang.jdbc.test.HsqldbGlobalReduceOperator;
 import org.apache.wayang.jdbc.test.HsqldbPlatform;
-import org.apache.wayang.basic.data.Record;
+import org.apache.wayang.jdbc.test.HsqldbSortOperator;
 import org.apache.wayang.jdbc.test.HsqldbTableSource;
 import org.junit.jupiter.api.Test;
 
-/**
- * Test suite for {@link SqlToStreamOperator}.
- */
-class JdbcGlobalReduceOperatorTest extends OperatorTestBase {
+public class JdbcSortOperatorTest extends OperatorTestBase {
     @Test
     void testWithHsqldb() throws SQLException {
         final Configuration configuration = new Configuration();
@@ -67,23 +61,23 @@ class JdbcGlobalReduceOperatorTest extends OperatorTestBase {
         tableSourceATask.setOutputChannel(0, new SqlQueryChannel(sqlChannelDescriptor, tableSourceA.getOutput(0)));
         tableSourceATask.setStage(sqlStage);
 
-        final ExecutionOperator globalReduceOperator = new HsqldbGlobalReduceOperator(
-                new ReduceDescriptor<Record>(null, Record.class).withSqlImplementation("COUNT(*)"));
+        final TransformationDescriptor<Record, Record> keyDescriptor = new TransformationDescriptor<Record, Record>().withSqlImplementation("col0","DESC");
+        final ExecutionOperator sortOperator = new HsqldbSortOperator(keyDescriptor);
 
-        final ExecutionTask globalReduceTask = new ExecutionTask(globalReduceOperator);
-        tableSourceATask.getOutputChannel(0).addConsumer(globalReduceTask, 0);
-        globalReduceTask.setOutputChannel(0,
-                new SqlQueryChannel(sqlChannelDescriptor, globalReduceOperator.getOutput(0)));
-        globalReduceTask.setStage(sqlStage);
+        final ExecutionTask sortTask = new ExecutionTask(sortOperator);
+        tableSourceATask.getOutputChannel(0).addConsumer(sortTask, 0);
+        sortTask.setOutputChannel(0,
+                new SqlQueryChannel(sqlChannelDescriptor, sortOperator.getOutput(0)));
+        sortTask.setStage(sqlStage);
 
         when(sqlStage.getStartTasks()).thenReturn(Collections.singleton(tableSourceATask));
-        when(sqlStage.getTerminalTasks()).thenReturn(Collections.singleton(globalReduceTask));
+        when(sqlStage.getTerminalTasks()).thenReturn(Collections.singleton(sortTask));
 
         final ExecutionStage nextStage = mock(ExecutionStage.class);
 
         final SqlToStreamOperator sqlToStreamOperator = new SqlToStreamOperator(HsqldbPlatform.getInstance());
         final ExecutionTask sqlToStreamTask = new ExecutionTask(sqlToStreamOperator);
-        globalReduceTask.getOutputChannel(0).addConsumer(sqlToStreamTask, 0);
+        sortTask.getOutputChannel(0).addConsumer(sqlToStreamTask, 0);
         sqlToStreamTask.setStage(nextStage);
 
         final JdbcExecutor executor = new JdbcExecutor(HsqldbPlatform.getInstance(), job);
@@ -92,17 +86,6 @@ class JdbcGlobalReduceOperatorTest extends OperatorTestBase {
         final SqlQueryChannel.Instance sqlQueryChannelInstance = (SqlQueryChannel.Instance) job.getCrossPlatformExecutor()
                 .getChannelInstance(sqlToStreamTask.getInputChannel(0));
 
-        final HsqldbPlatform hsqldbPlatform = new HsqldbPlatform();
-
-        try (Connection jdbcConnection = hsqldbPlatform.createDatabaseDescriptor(configuration).createJdbcConnection()) {
-            final Statement statement = jdbcConnection.createStatement();
-            final java.sql.ResultSet resultSet = statement.executeQuery(sqlQueryChannelInstance.getSqlQuery());
-            resultSet.next();
-            final int count = resultSet.getInt(1);
-
-            assertTrue(count > 0);
-        }
-
-        assertEquals("SELECT COUNT(*) FROM testA;", sqlQueryChannelInstance.getSqlQuery());
+        assertEquals("SELECT * FROM testA ORDER BY col0 DESC;", sqlQueryChannelInstance.getSqlQuery());
     }
 }

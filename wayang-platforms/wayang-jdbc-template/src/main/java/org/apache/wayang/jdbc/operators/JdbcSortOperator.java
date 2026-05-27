@@ -24,12 +24,17 @@ import java.util.Optional;
 import org.apache.wayang.basic.data.Record;
 import org.apache.wayang.basic.operators.SortOperator;
 import org.apache.wayang.core.api.Configuration;
+import org.apache.wayang.core.function.TransformationDescriptor;
 import org.apache.wayang.core.optimizer.costs.LoadProfileEstimator;
 import org.apache.wayang.core.optimizer.costs.LoadProfileEstimators;
 import org.apache.wayang.jdbc.compiler.FunctionCompiler;
 
 
 public abstract class JdbcSortOperator extends SortOperator<Record, Record> implements JdbcExecutionOperator {
+    public JdbcSortOperator(final TransformationDescriptor<Record, Record> keyDescriptor) {
+        super(keyDescriptor);
+    }
+
     public JdbcSortOperator(final SortOperator<Record, Record> that) {
         super(that);
     }
@@ -41,7 +46,7 @@ public abstract class JdbcSortOperator extends SortOperator<Record, Record> impl
 
     @Override
     public String createSqlClause(final Connection connection, final FunctionCompiler compiler) {
-        return keyDescriptor.getSqlImplementation().toString();
+        return " ORDER BY " + keyDescriptor.getSqlImplementation().field0 + " " + keyDescriptor.getSqlImplementation().field1;
     }
 
     @Override
