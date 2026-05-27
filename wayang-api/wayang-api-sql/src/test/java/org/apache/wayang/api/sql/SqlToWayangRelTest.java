@@ -237,7 +237,7 @@ class SqlToWayangRelTest {
                 .map(JdbcProjectionOperator.class::cast).findFirst().orElseThrow(() -> new RuntimeException("Projection not found"));
 
         final JdbcExecutor jdbcExecutor = mock();
-        final StringBuilder query = JdbcExecutor.createSqlString(jdbcExecutor, table, Arrays.asList(), projection, Arrays.asList());
+        final StringBuilder query = JdbcExecutor.createSqlString(jdbcExecutor, table, Arrays.asList(), projection, null, null, null, Arrays.asList());
 
         assertEquals("SELECT ID, NAME FROM T1;", query.toString());
     }
