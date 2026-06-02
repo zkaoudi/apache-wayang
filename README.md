@@ -30,26 +30,19 @@
 ![GitHub forks](https://img.shields.io/github/forks/apache/wayang?style=for-the-badge)
 ![GitHub Repo stars](https://img.shields.io/github/stars/apache/wayang?style=for-the-badge)
 
-[![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=Apache%20Wayang%20enables%20cross%20platform%20data%20processing,%20star%20it%20via:%20&url=https://github.com/apache/wayang&via=apachewayang&hashtags=dataprocessing,bigdata,analytics,hybridcloud,developers) [![Subreddit subscribers](https://img.shields.io/reddit/subreddit-subscribers/ApacheWayang?style=social)](https://www.reddit.com/r/ApacheWayang/)
+[![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?text=Apache%20Wayang%20enables%20cross%20platform%20data%20processing,%20star%20it%20via:%20&url=https://github.com/apache/wayang&via=apachewayang&hashtags=dataprocessing,bigdata,analytics,hybridcloud,developers) [![LinkedIn](https://img.shields.io/badge/LinkedIn-Follow-0A66C2?style=social&logo=linkedin)](https://www.linkedin.com/company/apachewayang)
 
 You write your pipeline against a single API, then decide how it runs. Point it at one engine and it runs there — or hand Wayang's cost-based optimizer the choice and let it pick the best platform for each step across your laptop, Apache Spark, Apache Flink, or a database, even splitting a single job across several. Either way, when your data outgrows one machine you don't rewrite anything — you just make another engine available.
 
-```
-        your pipeline (written once)
-                  │
-          ┌───────▼────────┐
-          │ Wayang optimizer│   ← chooses where each operator runs
-          └───────┬────────┘
-        ┌─────────┼──────────┬───────────┐
-     [ local ]  [ Spark ]  [ Flink ]  [ Postgres ] ...
-```
+<p align="center">
+  <img src="guides/img/wayang-architecture.svg" alt="A single pipeline, written once, feeds the Wayang optimizer, which routes each step to the best available engine — Local, Spark, Flink, Postgres, and others." width="720" />
+</p>
 
 ## Table of contents
 
 - [How it works](#how-it-works)
 - [Quickstart](#quickstart)
 - [Install](#install)
-- [Spark Dataset / DataFrame pipelines](#spark-dataset--dataframe-pipelines)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [Community](#community)
@@ -59,7 +52,7 @@ You write your pipeline against a single API, then decide how it runs. Point it 
 
 ## How it works
 
-Most data tools lock you into one engine. Pick Spark, and your code is Spark code forever. Outgrow it, or need a database in the mix, and you rewrite.
+Most data processing systems are designed around a single execution engine. That keeps things simple, but your pipeline ends up tied to that engine's API — so combining engines, or moving to another, typically means rewriting.
 
 Wayang sits one level up. You write a pipeline against Wayang's API and register the engines you *have* — then it's your call. Want control? Register one engine and it runs there. Want it handled? Register several and let the cost-based optimizer pick the best one for each step, even splitting a single job across engines.
 
@@ -76,10 +69,10 @@ Wayang sits one level up. You write a pipeline against Wayang's API and register
 
 **Wayang's APIs**
 
-- Java (Scala-like fluent builder, recommended)
+- Java (Scala-like fluent builder)
 - Scala
 - SQL
-- Java native (low-level)
+- Java native (low-level, we recommend the fluent scala-like)
 
 The plugin architecture makes adding new operators and platforms straightforward without touching internals — see [Adding operators](https://wayang.apache.org/docs/guide/adding-operators).
 
@@ -148,65 +141,6 @@ WayangContext wayang = new WayangContext(new Configuration())
 ```
 
 Now Wayang owns the placement decision. For each operator it estimates the cost on every registered platform and picks the cheapest — keeping a small job entirely local, pushing a large one onto Spark, or mixing both within the same job as the data demands. On a tiny input you'll see it keep everything local (that's the optimizer working correctly, not ignoring Spark); cross-platform splits show up once the data is big enough to justify them.
-
-<details>
-<summary><b>Same example in Scala</b></summary>
-
-Step 1 (local):
-
-```scala
-import org.apache.wayang.api._
-import org.apache.wayang.core.api.{Configuration, WayangContext}
-import org.apache.wayang.java.Java
-
-object WordCount {
-  def main(args: Array[String]): Unit = {
-    val wayangCtx = new WayangContext(new Configuration)
-    wayangCtx.register(Java.basicPlugin)
-
-    new PlanBuilder(wayangCtx)
-      .withJobName("WordCount")
-      .withUdfJarsOf(this.getClass)
-      .readTextFile("file:///path/to/input.txt")
-      .flatMap(_.split("\\W+"))
-      .filter(_.nonEmpty)
-      .map(word => (word.toLowerCase, 1))
-      .reduceByKey(_._1, (c1, c2) => (c1._1, c1._2 + c2._2))
-      .writeTextFile("file:///path/to/output.txt", t => s"${t._1}: ${t._2}")
-  }
-}
-```
-
-Step 2 (swap to Spark) and step 3 (register both) follow the same pattern as the Java tabs above — see the full [Getting started](https://wayang.apache.org/docs/guide/getting-started) page for the tabbed walkthrough.
-
-</details>
-
-<details>
-<summary><b>Same example in Python (pywayang)</b></summary>
-
-> [!NOTE]
-> pywayang has no PyPI release yet, and it's a client that talks to a running Wayang REST API. Setup is more involved than the JVM tracks — see the [Python install instructions](https://wayang.apache.org/docs/guide/getting-started#install) on the website.
-
-Step 1 (local):
-
-```python
-from pywy.dataquanta import WayangContext
-from pywy.platforms.java import JavaPlugin
-
-ctx = WayangContext().register({JavaPlugin})
-
-(ctx
-    .textfile("file:///path/to/input.txt")
-    .flatmap(lambda line: line.split())
-    .filter(lambda word: word.strip() != "")
-    .map(lambda word: (word.lower(), 1))
-    .reduce_by_key(lambda t: t[0], lambda t1, t2: (t1[0], int(t1[1]) + int(t2[1])))
-    .store_textfile("file:///path/to/output.txt"))
-```
-
-Steps 2 and 3 follow the same `register({...})` pattern. The full walkthrough is on [the website](https://wayang.apache.org/docs/guide/getting-started).
-
-</details>
 
 ## Install
 
@@ -328,18 +262,6 @@ bin/wayang-submit org.apache.wayang.apps.wordcount.Main java file://$(pwd)/READM
 ./mvnw test
 ```
 
-## Spark Dataset / DataFrame pipelines
-
-Wayang's Spark platform can execute end-to-end pipelines on Spark `Dataset[Row]` (DataFrames) — useful for lakehouse-style storage (Parquet, Delta) or plugging Spark ML stages into a Wayang plan without falling back to RDDs.
-
-To build a Dataset-backed pipeline:
-
-1. **Use the Dataset-aware plan builder APIs.** `PlanBuilder.readParquet(..., preferDataset = true)` (or `JavaPlanBuilder.readParquet(..., ..., true)`) reads Parquet directly into a Dataset channel. `DataQuanta.writeParquet(..., preferDataset = true)` writes a Dataset channel without converting back to an RDD.
-2. **Keep operators dataset-compatible.** Most operators work unchanged; if an operator explicitly prefers RDDs, Wayang inserts the necessary conversions automatically (at extra cost). Custom operators can expose `DatasetChannel` descriptors to stay in the DataFrame world.
-3. **Let the optimizer do the rest.** The optimizer assigns a higher cost to Dataset↔RDD conversions, so once you opt into Dataset sources/sinks the plan stays in Dataset form by default.
-
-No extra flags are required — opt into the Dataset-based APIs where you want DataFrame semantics. If you see unexpected conversions in your execution plan, check that the upstream/downstream operators consume `DatasetChannel`; otherwise Wayang will insert a conversion operator for you.
-
 ## Documentation
 
 - **[Getting started](https://wayang.apache.org/docs/guide/getting-started)** — the full tabbed walkthrough in Java, Scala, and Python.
@@ -352,13 +274,14 @@ No extra flags are required — opt into the Dataset-based APIs where you want D
 
 Contributions are welcome — bug reports, doc fixes, new platform adapters, new operators, optimizer improvements, anything. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [building guide](guides/develop-in-Wayang.md), open an issue if you're not sure where to start, and introduce yourself on the [dev mailing list](https://wayang.apache.org/docs/community/mailinglist) — that's where active work gets discussed.
 
-If you're looking for somewhere to begin, doc improvements, new platform adapters, and additional examples are areas where a focused PR can land quickly.
+If you're looking for somewhere to begin, doc improvements, new operators, and additional examples are areas where a focused PR can land quickly.
 
 ## Community
 
 - **Mailing lists** — [https://wayang.apache.org/docs/community/mailinglist](https://wayang.apache.org/docs/community/mailinglist) (user and dev)
+- **LinkedIn** — [Apache Wayang](https://www.linkedin.com/company/apachewayang)
 - **Twitter** — [@apachewayang](https://twitter.com/apachewayang)
-- **Reddit** — [r/ApacheWayang](https://www.reddit.com/r/ApacheWayang/)
+
 
 ## Authors
 
